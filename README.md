@@ -11,6 +11,7 @@ com waveform reativa e log de comandos.
 | Camada | Escolha |
 | --- | --- |
 | Framework | Next.js 16 (App Router, TypeScript) |
+| Cérebro | Claude Opus 5 via `@anthropic-ai/sdk` (tool use + visão + busca web) |
 | Estilo | Tailwind CSS 3.4 com design tokens próprios |
 | Ícones | `lucide-react` |
 | Animação de UI | Framer Motion (nós, painéis, transições) |
@@ -120,6 +121,124 @@ são só os totais (`loadOnda2Summary`), suficientes para o LED do nó e o "Resu
 do turno"; a base completa é buscada em `/api/campanha/onda2` apenas quando o
 módulo é aberto. Como rail e gaveta mostram o mesmo painel, apenas um dos dois é
 montado por vez (`useMediaQuery`) — do contrário a base seria baixada em dobro.
+
+## O cérebro do Jarvis
+
+O HUD deixou de ser só painel: o microfone conduz um ciclo **ouvir → pensar →
+falar**, com o cofre Obsidian como memória e ferramentas reais para agir.
+
+### Configuração
+
+Copie `.env.example` para `.env.local`. **Nada é obrigatório** — cada capacidade
+liga sozinha quando a chave existe, e o que falta degrada de forma explícita:
+
+| Variável | Sem ela |
+| --- | --- |
+| `OBSIDIAN_VAULT_PATH` | usa `./jarvis-vault` no projeto (teste, não produção) |
+| `ANTHROPIC_API_KEY` | conversa, visão e pesquisa web ficam offline; o HUD avisa no log |
+| `OPENAI_API_KEY` | transcrição cai para a Web Speech API do navegador |
+| `ELEVENLABS_API_KEY` | fala cai para o `speechSynthesis` do sistema |
+
+`GET /api/jarvis/status` responde o que está ligado — só booleanos, nenhuma
+chave sai do servidor. É por ele que os hooks escolhem Whisper ou Web Speech,
+ElevenLabs ou voz nativa.
+
+### Ponte com o Obsidian
+
+`lib/jarvis/obsidian/` escreve Markdown de verdade, com frontmatter YAML, na
+estrutura pedida:
+
+```
+/Clientes     ficha por cliente — tags (#loira, #progressiva, #preferencia_cafe),
+              alertas químicos, preferências e histórico químico datado
+/Financeiro   um arquivo por dia — entradas, saídas e comissões, com os totais
+              recalculados no frontmatter a cada lançamento
+/Diario       log de atendimento + lembretes com hora, no frontmatter
+```
+
+Três decisões que valem conhecer:
+
+- **Escrita aditiva.** `upsertCliente` soma tags, preferências e histórico ao que
+  já existe e preserva as seções que o profissional escreveu à mão. Uma conversa
+  de voz nunca deve apagar prontuário por engano.
+- **Totais recalculados, não incrementados.** O financeiro relê as linhas do
+  arquivo e refaz as somas. Se alguém corrigir um valor direto no Obsidian, o
+  frontmatter continua honesto.
+- **Nada escreve fora do cofre.** Todo caminho passa por `resolveInVault`, que
+  rejeita qualquer coisa que escape da raiz, e nomes viram slug antes de virar
+  arquivo. Uma travessia devolve 400, não 500 — é entrada inválida.
+
+### Ferramentas do cérebro
+
+O modelo não fala com o disco: chama ferramentas que são pontes para os módulos
+já testados. `buscar_cliente`, `salvar_cliente`, `registrar_financeiro`,
+`consultar_financeiro`, `calcular`, `registrar_diario`, `criar_lembrete` e
+`listar_lembretes`, todas com `strict: true`.
+
+A **pesquisa web** não é integração de terceiro: usa a ferramenta de servidor
+`web_search` da própria Anthropic, que roda do lado deles e volta com as fontes
+no mesmo response — uma chave a menos para administrar. O prompt manda citar a
+fonte e **proíbe estimar preço de fornecedor como se fosse pesquisado**.
+
+### Voz e visão
+
+| Hook | O que faz |
+| --- | --- |
+| `useSpeechRecognition` | Web Speech API ou gravação + Whisper, escolhido pelo status |
+| `useSpeechSynthesis` | ElevenLabs com queda automática para a voz do sistema |
+| `useWebcam` | abre a câmera **só no instante da captura**, tira um quadro e fecha |
+| `useScreenCapture` | Screen Capture API para o Jarvis ler a tela atual |
+| `useJarvis` | orquestra tudo: status, ciclo de voz, histórico e lembretes |
+
+A visão manda o quadro para `/api/jarvis/vision/analyze`, que roda o mesmo
+cérebro com as ferramentas disponíveis — então o Jarvis cruza o que vê na
+cadeira com o histórico químico da cliente antes de opinar.
+
+### Lembretes com gatilho
+
+Lembretes com horário vivem no frontmatter do dia. `GET /api/jarvis/lembretes?vencidos=1`
+devolve os que venceram **e os marca como disparados** — efeito colateral de
+propósito, para o HUD não repetir o mesmo alarme a cada varredura (uma por
+minuto). Ao vencer, o Jarvis fala.
+
+### Rotas
+
+| Rota | Método | Para quê |
+| --- | --- | --- |
+| `/api/jarvis/status` | GET | capacidades ativas e caminho do cofre |
+| `/api/jarvis/chat` | POST | uma volta de conversa, com ferramentas |
+| `/api/jarvis/vision/analyze` | POST | diagnóstico de webcam ou leitura de tela |
+| `/api/jarvis/voice/transcribe` | POST | áudio → texto (Whisper) |
+| `/api/jarvis/voice/speak` | POST | texto → áudio (ElevenLabs) |
+| `/api/jarvis/obsidian/clientes` | GET/POST | buscar e gravar fichas |
+| `/api/jarvis/obsidian/financeiro` | GET/POST | caixa do dia e consolidado |
+| `/api/jarvis/obsidian/diario` | GET/POST | log de atendimento |
+| `/api/jarvis/lembretes` | GET/POST/PATCH | lembretes e gatilhos |
+| `/api/jarvis/finance` | POST | ticket médio, comissão, margem por grama |
+
+### ⚠️ As rotas não têm autenticação
+
+Elas leem e escrevem no disco do salão e gastam crédito de API. Isso é aceitável
+numa máquina local, que é o caso de uso pretendido. **Antes de expor este app em
+qualquer rede**, coloque autenticação na frente de `/api/jarvis/*` — hoje quem
+alcança a porta 3000 alcança o cofre.
+
+### O que foi verificado
+
+Testado de ponta a ponta neste ambiente: escrita e leitura do cofre nas três
+pastas, upsert aditivo, recálculo dos totais, gatilho de lembrete disparando uma
+única vez, os três cálculos financeiros, bloqueio de travessia de caminho e a
+degradação explícita de cada capacidade sem chave.
+
+O **laço de ferramentas** foi verificado contra um servidor falso no lugar da
+API: confirmou que a requisição sai com `thinking: adaptive`, `effort` em
+`output_config`, as ferramentas com `strict` e os `tool_result` numa única
+mensagem — e que a ferramenta executa e grava no cofre.
+
+Não foi possível testar contra os serviços reais: **este ambiente não tem
+credenciais de Anthropic, OpenAI nem ElevenLabs**. As chamadas ao modelo, ao
+Whisper e à ElevenLabs seguem o contrato documentado de cada uma, mas nenhuma
+foi exercida de verdade.
 
 ## Interação
 

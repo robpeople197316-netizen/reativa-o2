@@ -16,9 +16,17 @@ import {
   type SalonModule,
 } from "@/lib/modules";
 import { useOnda2Progress } from "@/lib/campaign/useOnda2Progress";
-import { useCommandLog } from "@/lib/useCommandLog";
+import { useCommandLog, type LogLevel } from "@/lib/useCommandLog";
+import { useJarvis, type JarvisEvent } from "@/lib/jarvis/hooks/useJarvis";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { useMicLevel } from "@/lib/useMicLevel";
+
+const PHASE_LABEL: Record<string, string> = {
+  standby: "STANDBY",
+  listening: "LISTENING",
+  thinking: "PROCESSANDO",
+  speaking: "FALANDO",
+};
 
 export interface Onda2Summary {
   total: number;
@@ -33,7 +41,6 @@ export interface Onda2Summary {
  */
 export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
   const [activeId, setActiveId] = useState<ModuleId | null>(null);
-  const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
 
   // Rail e gaveta mostram o MESMO painel: montar os dois faria o console da
@@ -41,7 +48,28 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
   const wide = useMediaQuery("(min-width: 1280px)", true);
 
   const { entries, push } = useCommandLog();
-  const { dataRef, status: micStatus } = useMicLevel(listening);
+
+  // Os eventos do cérebro alimentam o log de comandos do HUD.
+  const onJarvisEvent = useCallback(
+    (event: JarvisEvent) => {
+      const level: LogLevel =
+        event.kind === "erro" ? "warn" : event.kind === "ferramenta" ? "info" : "voice";
+
+      const prefixo: Record<JarvisEvent["kind"], string> = {
+        voce: "Você",
+        jarvis: "JARVIS",
+        ferramenta: "Ferramenta",
+        lembrete: "Lembrete",
+        erro: "Erro",
+      };
+
+      push(`${prefixo[event.kind]}: ${event.text}`, level);
+    },
+    [push],
+  );
+
+  const jarvis = useJarvis({ onEvent: onJarvisEvent });
+  const { dataRef, status: micStatus } = useMicLevel(jarvis.listening);
 
   // Progresso real da Onda 2 — leitura barata, sem baixar os contatos.
   const wave = useOnda2Progress(onda2.total, onda2.presetSent);
@@ -54,11 +82,13 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
 
   const activeModule = activeId ? MODULES_BY_ID[activeId] : null;
 
-  const coreState: CoreState = listening
-    ? "listening"
-    : processing
-      ? "processing"
-      : "standby";
+  // O núcleo espelha a fase real do assistente, não só o microfone.
+  const coreState: CoreState =
+    jarvis.phase === "listening"
+      ? "listening"
+      : jarvis.phase === "thinking" || jarvis.phase === "speaking" || processing
+        ? "processing"
+        : "standby";
 
   const selectModule = useCallback(
     (module: SalonModule) => {
@@ -85,14 +115,16 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
   }, [push]);
 
   const toggleListening = useCallback(() => {
-    setListening((prev) => {
+    if (!jarvis.status?.capabilities.brain) {
       push(
-        prev ? "Captura de voz encerrada · STANDBY" : "Captura de voz iniciada · LISTENING",
-        "voice",
+        "Cérebro offline · defina ANTHROPIC_API_KEY para conversar com o JARVIS",
+        "warn",
       );
-      return !prev;
-    });
-  }, [push]);
+      return;
+    }
+
+    jarvis.toggleListening();
+  }, [jarvis, push]);
 
   // ESC fecha o módulo aberto; barra de espaço alterna o microfone.
   useEffect(() => {
@@ -189,11 +221,13 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
       </AnimatePresence>
 
       <VoiceHUD
-        listening={listening}
+        listening={jarvis.listening}
         onToggle={toggleListening}
         micStatus={micStatus}
         dataRef={dataRef}
         entries={entries}
+        phaseLabel={PHASE_LABEL[jarvis.phase]}
+        interim={jarvis.interim}
       />
     </div>
   );

@@ -14,6 +14,10 @@ interface VoiceHUDProps {
   micStatus: MicStatus;
   dataRef: React.RefObject<Uint8Array | null>;
   entries: LogEntry[];
+  /** Rótulo do estado do Jarvis sob o botão: STANDBY, PENSANDO, FALANDO… */
+  phaseLabel?: string;
+  /** Transcrição parcial enquanto a pessoa fala. */
+  interim?: string;
 }
 
 const MIC_HINT: Record<MicStatus, string> = {
@@ -31,6 +35,8 @@ export function VoiceHUD({
   micStatus,
   dataRef,
   entries,
+  phaseLabel,
+  interim,
 }: VoiceHUDProps) {
   return (
     <section className="relative z-20 border-t border-hud-400/15 bg-abyss-950/70 backdrop-blur-md">
@@ -53,8 +59,15 @@ export function VoiceHUD({
             </span>
           </div>
 
-          <div className="h-14">
+          <div className="relative h-14">
             <AudioWaveform active={listening} dataRef={dataRef} />
+
+            {/* O que o Jarvis está ouvindo, sobreposto à onda */}
+            {interim && (
+              <span className="pointer-events-none absolute inset-x-2 bottom-0 truncate text-center font-mono text-[10px] text-hud-100/80">
+                {interim}
+              </span>
+            )}
           </div>
         </div>
 
@@ -103,7 +116,7 @@ export function VoiceHUD({
               listening ? "text-acid text-glow" : "text-hud-200/70"
             }`}
           >
-            {listening ? "LISTENING" : "STANDBY"}
+            {phaseLabel ?? (listening ? "LISTENING" : "STANDBY")}
           </span>
         </div>
 
