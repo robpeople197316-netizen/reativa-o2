@@ -121,6 +121,21 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
     push("Painel de módulo fechado", "info");
   }, [push]);
 
+  /**
+   * Frase de teste da voz.
+   *
+   * Não depende do cérebro: é o único jeito de conferir caixa de som e voz do
+   * sistema antes de configurar qualquer chave de API.
+   */
+  const testarVoz = useCallback(() => {
+    const elevenlabs = jarvis.status?.capabilities.elevenLabs;
+    void jarvis.say(
+      elevenlabs
+        ? "Voz da ElevenLabs ativa. Estou pronto para começar o dia."
+        : "Voz do sistema ativa. Estou pronto para começar o dia.",
+    );
+  }, [jarvis]);
+
   const toggleListening = useCallback(() => {
     if (!jarvis.status?.capabilities.brain) {
       push(
@@ -198,6 +213,7 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
               onAsk={jarvis.ask}
               onReset={jarvis.reset}
               onClose={() => setConsoleOpen(false)}
+              onTestVoice={testarVoz}
             />
           </div>
         )}
@@ -253,6 +269,7 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
                 onAsk={jarvis.ask}
                 onReset={jarvis.reset}
                 onClose={() => setConsoleOpen(false)}
+                onTestVoice={testarVoz}
                 className="!bg-abyss-900/95"
               />
             </motion.div>

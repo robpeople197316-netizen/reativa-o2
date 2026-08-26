@@ -41,7 +41,14 @@ const CAPABILITIES: Capability[] = [
  * caminho. O texto abaixo de cada LED diz qual — o operador precisa saber se
  * está falando com o Whisper ou com o navegador.
  */
-export function CapabilityLeds({ status }: { status: JarvisStatus | null }) {
+export function CapabilityLeds({
+  status,
+  onTestVoice,
+}: {
+  status: JarvisStatus | null;
+  /** Toca uma frase de teste — o único jeito de ouvir a voz sem gastar API. */
+  onTestVoice?: () => void;
+}) {
   return (
     <div className="border-b border-hud-400/15 px-3 py-2.5">
       <div className="grid grid-cols-4 gap-1.5">
@@ -57,12 +64,11 @@ export function CapabilityLeds({ status }: { status: JarvisStatus | null }) {
 
           const Icon = cap.icon;
 
-          return (
-            <div
-              key={cap.key}
-              title={ativo ? `${cap.label}: ativo` : `${cap.label}: ${cap.fallback}`}
-              className="flex flex-col items-center gap-1 rounded border border-hud-400/10 bg-abyss-800/40 px-1 py-1.5"
-            >
+          const testavel = cap.key === "elevenLabs" && Boolean(onTestVoice);
+          const base = ativo ? `${cap.label}: ativo` : `${cap.label}: ${cap.fallback}`;
+
+          const conteudo = (
+            <>
               <Icon className={`h-3.5 w-3.5 ${cor}`} strokeWidth={1.6} />
               <span className="hud-label text-[8px] leading-none">{cap.label}</span>
               <span
@@ -74,6 +80,30 @@ export function CapabilityLeds({ status }: { status: JarvisStatus | null }) {
                       : "bg-hud-400/40"
                 }`}
               />
+            </>
+          );
+
+          const classes =
+            "flex flex-col items-center gap-1 rounded border border-hud-400/10 bg-abyss-800/40 px-1 py-1.5";
+
+          if (testavel) {
+            return (
+              <button
+                key={cap.key}
+                type="button"
+                onClick={onTestVoice}
+                title={`${base} · toque para ouvir uma frase de teste`}
+                aria-label="Ouvir uma frase de teste"
+                className={`${classes} transition-colors hover:border-hud-300/50 hover:bg-abyss-700/50`}
+              >
+                {conteudo}
+              </button>
+            );
+          }
+
+          return (
+            <div key={cap.key} title={base} className={classes}>
+              {conteudo}
             </div>
           );
         })}

@@ -30,6 +30,8 @@ interface JarvisConsoleProps {
   onAsk: (message: string, anexo?: JarvisAnexo | null) => void | Promise<void>;
   onReset: () => void;
   onClose: () => void;
+  /** Toca uma frase de teste pelo caminho de voz ativo. */
+  onTestVoice?: () => void;
   className?: string;
 }
 
@@ -56,6 +58,7 @@ export function JarvisConsole({
   onAsk,
   onReset,
   onClose,
+  onTestVoice,
   className = "",
 }: JarvisConsoleProps) {
   const [aba, setAba] = useState<Aba>("conversa");
@@ -147,7 +150,7 @@ export function JarvisConsole({
         </button>
       </div>
 
-      <CapabilityLeds status={status} />
+      <CapabilityLeds status={status} onTestVoice={onTestVoice} />
 
       {/* Abas */}
       <div className="flex gap-1 border-b border-hud-400/15 px-2 pt-2">

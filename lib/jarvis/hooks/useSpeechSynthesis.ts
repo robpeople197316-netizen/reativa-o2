@@ -5,6 +5,58 @@ import { useCallback, useEffect, useRef, useState } from "react";
 export type VoiceMode = "browser" | "elevenlabs";
 
 /**
+ * A lista de vozes do navegador chega DEPOIS do primeiro acesso: `getVoices()`
+ * responde vazio até o evento `voiceschanged`. Ler uma vez só, no ato de falar,
+ * fazia a primeira frase sair sem voz escolhida — e no Windows isso significa
+ * a voz padrão do sistema, em inglês, lendo português.
+ */
+function vozesDisponiveis(): Promise<SpeechSynthesisVoice[]> {
+  return new Promise((resolve) => {
+    const atuais = window.speechSynthesis.getVoices();
+    if (atuais.length) {
+      resolve(atuais);
+      return;
+    }
+
+    let resolvido = false;
+    const entregar = () => {
+      if (resolvido) return;
+      resolvido = true;
+      window.speechSynthesis.onvoiceschanged = null;
+      resolve(window.speechSynthesis.getVoices());
+    };
+
+    window.speechSynthesis.onvoiceschanged = entregar;
+    // Rede de segurança: alguns navegadores nunca disparam o evento.
+    window.setTimeout(entregar, 1200);
+  });
+}
+
+/**
+ * Escolhe a melhor voz em português disponível.
+ *
+ * Os nomes mudam por sistema — no Windows são "Microsoft Maria/Thalita", no
+ * macOS "Luciana", no Chrome "Google português". Em vez de procurar nomes
+ * específicos, pontua: português do Brasil primeiro, e dentro disso as vozes
+ * "natural"/"online", que são bem melhores que as antigas.
+ */
+function escolherVoz(vozes: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  const candidatas = vozes.filter((v) => v.lang?.toLowerCase().startsWith("pt"));
+  if (!candidatas.length) return null;
+
+  const nota = (v: SpeechSynthesisVoice) => {
+    let n = 0;
+    if (v.lang?.toLowerCase().replace("_", "-") === "pt-br") n += 100;
+    if (/natural|online|neural|wavenet/i.test(v.name)) n += 40;
+    if (/google/i.test(v.name)) n += 20;
+    if (v.default) n += 5;
+    return n;
+  };
+
+  return [...candidatas].sort((a, b) => nota(b) - nota(a))[0];
+}
+
+/**
  * A fala do Jarvis.
  *
  * Com ELEVENLABS_API_KEY no servidor, usa a voz da ElevenLabs; sem ela, a voz
@@ -19,6 +71,7 @@ export function useSpeechSynthesis({
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
+  const vozRef = useRef<SpeechSynthesisVoice | null>(null);
 
   const cleanupAudio = useCallback(() => {
     if (urlRef.current) {
@@ -42,14 +95,26 @@ export function useSpeechSynthesis({
   }, [cleanupAudio]);
 
   const speakBrowser = useCallback(
-    (text: string) =>
-      new Promise<void>((resolve) => {
-        if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-          setError("Este navegador não sintetiza voz.");
-          resolve();
-          return;
-        }
+    async (text: string) => {
+      if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+        setError("Este navegador não sintetiza voz.");
+        return;
+      }
 
+      // Resolve a voz uma vez e reaproveita nas falas seguintes.
+      if (!vozRef.current) {
+        vozRef.current = escolherVoz(await vozesDisponiveis());
+        if (!vozRef.current) {
+          // Diagnóstico com o caminho da solução: quem lê isto está no Windows
+          // e não tem como adivinhar onde se instala uma voz.
+          setError(
+            "Nenhuma voz em português instalada. No Windows: Configurações → " +
+              "Hora e Idioma → Fala → Adicionar vozes.",
+          );
+        }
+      }
+
+      await new Promise<void>((resolve) => {
         window.speechSynthesis.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
@@ -57,11 +122,7 @@ export function useSpeechSynthesis({
         // Tom corporativo: um pouco mais grave e levemente acelerado.
         utterance.rate = 1.04;
         utterance.pitch = 0.92;
-
-        const preferred = window.speechSynthesis
-          .getVoices()
-          .find((v) => v.lang?.startsWith("pt") && /google|luciana|female/i.test(v.name));
-        if (preferred) utterance.voice = preferred;
+        if (vozRef.current) utterance.voice = vozRef.current;
 
         utterance.onend = () => {
           setSpeaking(false);
@@ -74,7 +135,8 @@ export function useSpeechSynthesis({
 
         setSpeaking(true);
         window.speechSynthesis.speak(utterance);
-      }),
+      });
+    },
     [lang],
   );
 
