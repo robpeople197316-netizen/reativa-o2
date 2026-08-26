@@ -106,6 +106,29 @@ export async function readNote<T = Record<string, unknown>>(
   }
 }
 
+/**
+ * Remove chaves `undefined` antes de serializar.
+ *
+ * O YAML não tem representação para undefined e o dump ESTOURA ao encontrar
+ * uma — um campo opcional não preenchido derrubava a escrita inteira. Limpar
+ * aqui protege todos os escritores de uma vez.
+ */
+function stripUndefined(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.filter((v) => v !== undefined).map(stripUndefined);
+  }
+
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      if (v !== undefined) out[k] = stripUndefined(v);
+    }
+    return out;
+  }
+
+  return value;
+}
+
 /** Escreve a nota inteira, frontmatter + corpo. */
 export async function writeNote<T extends object>(
   relPath: string,
@@ -115,7 +138,10 @@ export async function writeNote<T extends object>(
   const target = resolveInVault(relPath);
   await mkdir(path.dirname(target), { recursive: true });
 
-  const body = matter.stringify(`${content.trim()}\n`, data as Record<string, unknown>);
+  const body = matter.stringify(
+    `${content.trim()}\n`,
+    stripUndefined(data) as Record<string, unknown>,
+  );
   await writeFile(target, body, "utf8");
 
   return { relPath, data, content: content.trim() };
