@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 
-import { STATUS_META, type SalonModule } from "@/lib/modules";
+import { STATUS_META, type ModuleStatus, type SalonModule } from "@/lib/modules";
 
 interface OrbitNodeProps {
   module: SalonModule;
@@ -13,6 +13,8 @@ interface OrbitNodeProps {
   index: number;
   onSelect: (module: SalonModule) => void;
   onHover: (module: SalonModule | null) => void;
+  /** Status calculado em runtime (módulos com fonte de dados real). */
+  status?: ModuleStatus;
 }
 
 /** Nó orbital: botão circular com ícone, rótulo e LED de status. */
@@ -25,9 +27,10 @@ export function OrbitNode({
   index,
   onSelect,
   onHover,
+  status: statusOverride,
 }: OrbitNodeProps) {
   const Icon = module.icon;
-  const status = STATUS_META[module.status];
+  const status = STATUS_META[statusOverride ?? module.status];
 
   return (
     <motion.button

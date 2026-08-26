@@ -42,8 +42,13 @@ export interface SalonModule {
   status: ModuleStatus;
   /** Anel orbital: 0 = interno, 1 = externo. Distribui os nós em profundidade. */
   ring: 0 | 1;
-  metrics: ModuleMetric[];
-  feed: string[];
+  /**
+   * Módulos com fonte de dados própria dispensam métricas estáticas: o painel
+   * renderiza o console da fonte no lugar dos cartões.
+   */
+  live?: "onda2";
+  metrics?: ModuleMetric[];
+  feed?: string[];
 }
 
 export const STATUS_META: Record<
@@ -104,17 +109,8 @@ export const SALON_MODULES: SalonModule[] = [
     accent: "124 92 255",
     status: "atencao",
     ring: 0,
-    metrics: [
-      { label: "Onda 2 · enviados", value: "312", gauge: 68 },
-      { label: "Taxa resposta", value: "27%", delta: 5.5, gauge: 27 },
-      { label: "Agendou pós-msg", value: "84", delta: 11.2 },
-      { label: "CAC reativação", value: "R$ 9,40", delta: -14.0 },
-    ],
-    feed: [
-      "Campanha 'Onda 2 · Reativação' — 148 contatos restantes no lote",
-      "Melhor janela de envio: terça 10h–12h (resposta 34%)",
-      "Promo 'Escova + Hidratação' expira em 3 dias",
-    ],
+    // Base real: os contatos, o template e os lotes vêm do ONDA2_app.html.
+    live: "onda2",
   },
   {
     id: "agendas",

@@ -38,6 +38,7 @@ app/
   globals.css             Reset, fundo, classes .hud-panel / .hud-corners / .text-glow
 components/hud/
   JarvisDashboard.tsx     Casca: estado do núcleo, módulo ativo, voz, atalhos
+  CampaignConsole.tsx     Console da Onda 2 dentro do painel de MARKETING
   JarvisHeader.tsx        JARVIS CORE ONLINE, data/hora, clima, Obsidian Vault
   StatusPill.tsx          Bloco atômico do header
   OrbitalMap.tsx          Geometria das órbitas, linhas de conexão, fallback compacto
@@ -51,12 +52,19 @@ components/hud/
   ParticleField.tsx       Campo de partículas do fundo
 lib/
   modules.ts              Modelo de dados dos 8 módulos (fonte única da verdade)
+  campaign/
+    onda2.ts              Tipos + chave de progresso compartilhada
+    onda2.server.ts       Parser que lê o ONDA2_app.html
+    useOnda2.ts           Campanha completa (contatos, envio, progresso)
+    useOnda2Progress.ts   Leitura barata do progresso, sem baixar a base
   useClock.ts             Relógio em tempo real (sem mismatch de SSR)
   useWeather.ts           Clima local (simulado — troque pelo seu provedor)
   useVaultSync.ts         Status do Obsidian Local Vault
   useCommandLog.ts        Buffer circular de eventos
   useMicLevel.ts          Captura de áudio via Web Audio API
   useElementSize.ts       Medição do palco para o layout orbital
+  useMediaQuery.ts        Decide entre rail e gaveta (monta só um dos dois)
+app/api/campanha/onda2/   Rota estática que serve a base da campanha
 ```
 
 ## Módulos orbitais
@@ -69,12 +77,49 @@ o mapa, o rail e a visão geral se ajustam sozinhos.
 | --- | --- |
 | CLIENTES | Prontuário, histórico de químicas, preferências |
 | FINANCEIRO | Faturamento, margem, comissões, fluxo de caixa |
-| MARKETING | Campanhas WhatsApp, retenção, promoções |
+| MARKETING | **Campanha real Onda 2** — ver abaixo |
 | AGENDAS | Ocupação das bancadas, encaixes, grade da equipe |
 | ESTOQUE | Previsão de uso de produtos, alertas de falta |
 | METAS | Desempenho da equipe e faturamento diário |
 | HISTÓRICO QUÍMICO | Fórmulas, compatibilidade, segurança química |
 | VISAGISMO | Formato de rosto, colorimetria, proposta |
+
+## MARKETING · a campanha Onda 2 é real
+
+O nó MARKETING não tem números *mock*: ele lê o **`ONDA2_app.html`** da raiz do
+repositório. `lib/campaign/onda2.server.ts` extrai do script daquele arquivo os
+598 contatos (`var D`), o template da mensagem (`var TMPL`), o preset de
+enviadas (`var PRESET`) e o teto diário do texto de instrução — sem etapa de
+geração de código. **O HTML continua sendo a fonte da verdade:** edite a base lá
+e o HUD acompanha no próximo build (em `dev`, no próximo request).
+
+Abrir o módulo dá o console completo da campanha: 12 lotes, progresso da onda,
+lista de contatos e disparo que abre o WhatsApp com o template preenchido
+(`wa.me/<fone>?text=…`), exatamente como o app original.
+
+### Progresso compartilhado
+
+O console grava na **mesma chave de `localStorage` (`onda2`) e no mesmo formato**
+do `ONDA2_app.html`. Na prática:
+
+- o progresso já existente no navegador aparece no HUD na primeira abertura;
+- marcar uma mensagem como enviada em qualquer um dos dois aparece no outro
+  (mesma aba via evento interno, outras abas via evento `storage`);
+- quem nunca usou o app recebe o preset original (lotes 1 e 2, 100 enviadas).
+
+> **Herança a conhecer:** o progresso é indexado pela *posição* do contato na
+> lista, não pelo telefone — é como o app em HTML sempre funcionou, e mudar isso
+> descartaria o histórico de quem já está usando. Reordenar a base invalida o
+> progresso salvo. Quando a base virar banco de dados, migre a chave para o
+> telefone.
+
+### Custo de carga
+
+Os ~600 contatos **não** entram no HTML inicial. O que o servidor manda de cara
+são só os totais (`loadOnda2Summary`), suficientes para o LED do nó e o "Resumo
+do turno"; a base completa é buscada em `/api/campanha/onda2` apenas quando o
+módulo é aberto. Como rail e gaveta mostram o mesmo painel, apenas um dos dois é
+montado por vez (`useMediaQuery`) — do contrário a base seria baixada em dobro.
 
 ## Interação
 
@@ -100,8 +145,9 @@ e o HUD segue funcionando; o rótulo ao lado de "AUDIO INPUT" diz qual modo est�
 
 ## Dados
 
-Os números são *mock* declarados em `lib/modules.ts`, com o formato final da UI já
-definido (`ModuleMetric`, `SalonModule`). Para plugar dados reais, troque a fonte do
+MARKETING roda com dados reais (seção acima). Os outros sete módulos ainda são
+*mock* declarado em `lib/modules.ts`, com o formato final da UI já definido
+(`ModuleMetric`, `SalonModule`). Para plugar dados reais, troque a fonte do
 array por um fetch/server component mantendo os mesmos tipos — nenhum componente de
 apresentação precisa mudar. O mesmo vale para `useWeather` e `useVaultSync`.
 
@@ -113,5 +159,5 @@ as animações de CSS, o drift das partículas e os pulsos que viajam nas conex�
 
 ---
 
-Os arquivos `reativacao2.html`, `reativacao3.html` e `ONDA2_app.html` na raiz são as
-ferramentas de campanha já existentes e seguem intactos.
+`ONDA2_app.html` segue intacto e continua funcionando sozinho — agora ele também
+alimenta o HUD. `reativacao2.html` e `reativacao3.html` permanecem como estavam.

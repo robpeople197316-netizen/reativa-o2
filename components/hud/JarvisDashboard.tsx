@@ -9,21 +9,48 @@ import { ModulePanel } from "@/components/hud/ModulePanel";
 import { OrbitalMap } from "@/components/hud/OrbitalMap";
 import { ParticleField } from "@/components/hud/ParticleField";
 import { VoiceHUD } from "@/components/hud/VoiceHUD";
-import { MODULES_BY_ID, type ModuleId, type SalonModule } from "@/lib/modules";
+import {
+  MODULES_BY_ID,
+  type ModuleId,
+  type ModuleStatus,
+  type SalonModule,
+} from "@/lib/modules";
+import { useOnda2Progress } from "@/lib/campaign/useOnda2Progress";
 import { useCommandLog } from "@/lib/useCommandLog";
+import { useMediaQuery } from "@/lib/useMediaQuery";
 import { useMicLevel } from "@/lib/useMicLevel";
+
+export interface Onda2Summary {
+  total: number;
+  lots: number;
+  presetSent: number;
+  dailyLimit: number;
+}
 
 /**
  * Casca do HUD: orquestra estado do núcleo, módulo selecionado, captura de
  * voz e o log compartilhado entre os painéis.
  */
-export function JarvisDashboard() {
+export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
   const [activeId, setActiveId] = useState<ModuleId | null>(null);
   const [listening, setListening] = useState(false);
   const [processing, setProcessing] = useState(false);
 
+  // Rail e gaveta mostram o MESMO painel: montar os dois faria o console da
+  // campanha buscar a base duas vezes. Só um existe por vez.
+  const wide = useMediaQuery("(min-width: 1280px)", true);
+
   const { entries, push } = useCommandLog();
   const { dataRef, status: micStatus } = useMicLevel(listening);
+
+  // Progresso real da Onda 2 — leitura barata, sem baixar os contatos.
+  const wave = useOnda2Progress(onda2.total, onda2.presetSent);
+
+  const statusOverrides: Partial<Record<ModuleId, ModuleStatus>> = {
+    marketing: wave.remaining === 0 ? "nominal" : "atencao",
+  };
+
+  const onda2Label = `${wave.sentTotal}/${onda2.total}`;
 
   const activeModule = activeId ? MODULES_BY_ID[activeId] : null;
 
@@ -110,21 +137,25 @@ export function JarvisDashboard() {
             activeId={activeId}
             onSelect={selectModule}
             onCoreActivate={toggleListening}
+            statusOverrides={statusOverrides}
           />
         </div>
 
-        <div className="hidden min-h-0 xl:block">
+        <div className={wide ? "hidden min-h-0 xl:block" : "hidden"}>
           <ModulePanel
             module={activeModule}
             onClose={closeModule}
             onSelect={selectModule}
+            statusOverrides={statusOverrides}
+            onda2Label={onda2Label}
+            onLog={push}
           />
         </div>
       </main>
 
       {/* Abaixo de xl o rail vira uma gaveta sobreposta ao mapa. */}
       <AnimatePresence>
-        {activeModule && (
+        {!wide && activeModule && (
           <div key="drawer" className="xl:hidden">
             <motion.button
               type="button"
@@ -147,6 +178,9 @@ export function JarvisDashboard() {
                 module={activeModule}
                 onClose={closeModule}
                 onSelect={selectModule}
+                statusOverrides={statusOverrides}
+                onda2Label={onda2Label}
+                onLog={push}
                 className="!bg-abyss-900/95"
               />
             </motion.div>

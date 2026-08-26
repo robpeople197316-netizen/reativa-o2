@@ -5,7 +5,12 @@ import { useMemo, useState } from "react";
 
 import { CoreOrb, type CoreState } from "@/components/hud/CoreOrb";
 import { OrbitNode } from "@/components/hud/OrbitNode";
-import { SALON_MODULES, type SalonModule } from "@/lib/modules";
+import {
+  SALON_MODULES,
+  type ModuleId,
+  type ModuleStatus,
+  type SalonModule,
+} from "@/lib/modules";
 import { useElementSize } from "@/lib/useElementSize";
 
 interface OrbitalMapProps {
@@ -13,6 +18,8 @@ interface OrbitalMapProps {
   activeId: string | null;
   onSelect: (module: SalonModule) => void;
   onCoreActivate: () => void;
+  /** Status em runtime por módulo — sobrescreve o declarado em modules.ts. */
+  statusOverrides?: Partial<Record<ModuleId, ModuleStatus>>;
 }
 
 interface PlacedNode {
@@ -37,6 +44,7 @@ export function OrbitalMap({
   activeId,
   onSelect,
   onCoreActivate,
+  statusOverrides,
 }: OrbitalMapProps) {
   const { ref, size } = useElementSize<HTMLDivElement>();
   const [hovered, setHovered] = useState<SalonModule | null>(null);
@@ -210,6 +218,7 @@ export function OrbitalMap({
                 size={layout.nodeSize}
                 index={i}
                 active={activeId === module.id}
+                status={statusOverrides?.[module.id]}
                 onSelect={onSelect}
                 onHover={setHovered}
               />

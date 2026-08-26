@@ -3,8 +3,16 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronRight, Gauge, Radar, X } from "lucide-react";
 
+import { CampaignConsole } from "@/components/hud/CampaignConsole";
+import type { LogLevel } from "@/lib/useCommandLog";
 import { MetricGauge } from "@/components/hud/MetricGauge";
-import { SALON_MODULES, STATUS_META, type SalonModule } from "@/lib/modules";
+import {
+  SALON_MODULES,
+  STATUS_META,
+  type ModuleId,
+  type ModuleStatus,
+  type SalonModule,
+} from "@/lib/modules";
 
 interface ModulePanelProps {
   module: SalonModule | null;
@@ -12,6 +20,12 @@ interface ModulePanelProps {
   onSelect: (module: SalonModule) => void;
   /** Classes extras — a gaveta mobile usa para ficar opaca sobre o mapa. */
   className?: string;
+  /** Status em runtime por módulo — sobrescreve o declarado em modules.ts. */
+  statusOverrides?: Partial<Record<ModuleId, ModuleStatus>>;
+  /** Progresso da Onda 2 já formatado, ex.: "100/598". */
+  onda2Label?: string;
+  /** Encaminha eventos dos módulos live para o log de comandos. */
+  onLog?: (text: string, level: LogLevel) => void;
 }
 
 /** Rail lateral: detalha o módulo selecionado ou mostra a visão geral. */
@@ -20,6 +34,9 @@ export function ModulePanel({
   onClose,
   onSelect,
   className = "",
+  statusOverrides,
+  onda2Label,
+  onLog,
 }: ModulePanelProps) {
   return (
     <aside
@@ -41,45 +58,55 @@ export function ModulePanel({
             transition={{ duration: 0.25 }}
             className="flex h-full flex-col"
           >
-            <ModuleHeader module={module} onClose={onClose} />
+            <ModuleHeader
+              module={module}
+              status={statusOverrides?.[module.id]}
+              onClose={onClose}
+            />
 
-            <div className="grid grid-cols-2 gap-2 px-3">
-              {module.metrics.map((metric, i) => (
-                <MetricGauge
-                  key={metric.label}
-                  metric={metric}
-                  accent={module.accent}
-                  delay={i * 0.06}
-                />
-              ))}
-            </div>
-
-            <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-3 pb-3">
-              <div className="hud-label mb-2 flex items-center gap-2">
-                <Radar className="h-3 w-3" strokeWidth={1.6} />
-                Leitura do módulo
-              </div>
-
-              <ul className="space-y-1.5">
-                {module.feed.map((line, i) => (
-                  <motion.li
-                    key={line}
-                    initial={{ opacity: 0, x: 8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.2 + i * 0.07 }}
-                    className="flex gap-2 rounded border-l-2 bg-abyss-800/40 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-hud-100/80"
-                    style={{ borderColor: `rgb(${module.accent})` }}
-                  >
-                    <ChevronRight
-                      className="mt-0.5 h-3 w-3 shrink-0"
-                      style={{ color: `rgb(${module.accent})` }}
-                      strokeWidth={2}
+            {module.live === "onda2" ? (
+              <CampaignConsole onLog={onLog} />
+            ) : (
+              <>
+                <div className="grid grid-cols-2 gap-2 px-3">
+                  {module.metrics?.map((metric, i) => (
+                    <MetricGauge
+                      key={metric.label}
+                      metric={metric}
+                      accent={module.accent}
+                      delay={i * 0.06}
                     />
-                    <span>{line}</span>
-                  </motion.li>
-                ))}
-              </ul>
-            </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+                  <div className="hud-label mb-2 flex items-center gap-2">
+                    <Radar className="h-3 w-3" strokeWidth={1.6} />
+                    Leitura do módulo
+                  </div>
+
+                  <ul className="space-y-1.5">
+                    {module.feed?.map((line, i) => (
+                      <motion.li
+                        key={line}
+                        initial={{ opacity: 0, x: 8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2 + i * 0.07 }}
+                        className="flex gap-2 rounded border-l-2 bg-abyss-800/40 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-hud-100/80"
+                        style={{ borderColor: `rgb(${module.accent})` }}
+                      >
+                        <ChevronRight
+                          className="mt-0.5 h-3 w-3 shrink-0"
+                          style={{ color: `rgb(${module.accent})` }}
+                          strokeWidth={2}
+                        />
+                        <span>{line}</span>
+                      </motion.li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
           </motion.div>
         ) : (
           <motion.div
@@ -102,7 +129,7 @@ export function ModulePanel({
             <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
               {SALON_MODULES.map((m) => {
                 const Icon = m.icon;
-                const status = STATUS_META[m.status];
+                const status = STATUS_META[statusOverrides?.[m.id] ?? m.status];
 
                 return (
                   <li key={m.id}>
@@ -133,7 +160,7 @@ export function ModulePanel({
               })}
             </ul>
 
-            <SystemSummary />
+            <SystemSummary onda2Label={onda2Label} statusOverrides={statusOverrides} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -142,20 +169,32 @@ export function ModulePanel({
 }
 
 /** Resumo operacional do dia, no rodapé da visão geral. */
-function SystemSummary() {
-  const alerts = SALON_MODULES.filter((m) => m.status !== "nominal").length;
+function SystemSummary({
+  onda2Label,
+  statusOverrides,
+}: {
+  onda2Label?: string;
+  statusOverrides?: Partial<Record<ModuleId, ModuleStatus>>;
+}) {
+  const alerts = SALON_MODULES.filter(
+    (m) => (statusOverrides?.[m.id] ?? m.status) !== "nominal",
+  ).length;
 
   const cells = [
     { label: "Ocupação", value: "87%", tone: "text-hud-100" },
     { label: "Faturado hoje", value: "R$ 4,8k", tone: "text-hud-100" },
-    { label: "Alertas", value: String(alerts), tone: "text-ember" },
+    // Único número real desta linha: vem do ONDA2_app.html.
+    { label: "Onda 2", value: onda2Label ?? "—", tone: "text-plasma" },
   ];
 
   return (
     <div className="border-t border-hud-400/15 px-3 py-3">
-      <div className="hud-label mb-2 flex items-center gap-2">
-        <Gauge className="h-3 w-3" strokeWidth={1.6} />
-        Resumo do turno
+      <div className="hud-label mb-2 flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2">
+          <Gauge className="h-3 w-3" strokeWidth={1.6} />
+          Resumo do turno
+        </span>
+        <span className="text-ember">{alerts} alertas</span>
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -177,13 +216,15 @@ function SystemSummary() {
 
 function ModuleHeader({
   module,
+  status: statusOverride,
   onClose,
 }: {
   module: SalonModule;
+  status?: ModuleStatus;
   onClose: () => void;
 }) {
   const Icon = module.icon;
-  const status = STATUS_META[module.status];
+  const status = STATUS_META[statusOverride ?? module.status];
 
   return (
     <div
