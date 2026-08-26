@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 
 import type { CoreState } from "@/components/hud/CoreOrb";
+import { JarvisConsole } from "@/components/hud/jarvis/JarvisConsole";
 import { JarvisHeader } from "@/components/hud/JarvisHeader";
 import { ModulePanel } from "@/components/hud/ModulePanel";
 import { OrbitalMap } from "@/components/hud/OrbitalMap";
@@ -42,10 +43,16 @@ export interface Onda2Summary {
 export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
   const [activeId, setActiveId] = useState<ModuleId | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [consoleOpen, setConsoleOpen] = useState(false);
 
   // Rail e gaveta mostram o MESMO painel: montar os dois faria o console da
   // campanha buscar a base duas vezes. Só um existe por vez.
   const wide = useMediaQuery("(min-width: 1280px)", true);
+
+  // Três colunas só a partir de 1536px: abaixo disso o mapa orbital ficaria
+  // estreito demais e cairia na grade compacta.
+  const ultraWide = useMediaQuery("(min-width: 1536px)", true);
+  const consoleInline = consoleOpen && ultraWide;
 
   const { entries, push } = useCommandLog();
 
@@ -138,7 +145,16 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
       if (typing) return;
 
       if (e.key === "Escape") {
-        setActiveId((current) => (current ? null : current));
+        // Fecha uma coisa por vez: primeiro o console, depois o módulo.
+        setConsoleOpen((open) => {
+          if (open) return false;
+          setActiveId((current) => (current ? null : current));
+          return open;
+        });
+      }
+
+      if (e.key.toLowerCase() === "j" && !e.repeat && !e.metaKey && !e.ctrlKey) {
+        setConsoleOpen((o) => !o);
       }
 
       if (e.code === "Space" && !e.repeat) {
@@ -160,9 +176,32 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
         className="pointer-events-none absolute inset-0 bg-vignette"
       />
 
-      <JarvisHeader />
+      <JarvisHeader
+        consoleOpen={consoleOpen}
+        onToggleConsole={() => setConsoleOpen((o) => !o)}
+      />
 
-      <main className="relative z-10 grid min-h-0 flex-1 gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_minmax(300px,24rem)]">
+      <main
+        className={`relative z-10 grid min-h-0 flex-1 gap-3 p-3 ${
+          consoleInline
+            ? "2xl:grid-cols-[minmax(280px,22rem)_minmax(0,1fr)_minmax(300px,24rem)]"
+            : "xl:grid-cols-[minmax(0,1fr)_minmax(300px,24rem)]"
+        }`}
+      >
+        {consoleInline && (
+          <div className="hidden min-h-0 2xl:block">
+            <JarvisConsole
+              status={jarvis.status}
+              phase={jarvis.phase}
+              history={jarvis.history}
+              interim={jarvis.interim}
+              onAsk={jarvis.ask}
+              onReset={jarvis.reset}
+              onClose={() => setConsoleOpen(false)}
+            />
+          </div>
+        )}
+
         <div className="relative min-h-0 overflow-hidden rounded-lg border border-hud-400/10">
           <OrbitalMap
             coreState={coreState}
@@ -184,6 +223,42 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
           />
         </div>
       </main>
+
+      {/* Abaixo de 2xl o console vira gaveta sobreposta. */}
+      <AnimatePresence>
+        {consoleOpen && !ultraWide && (
+          <div key="console-drawer">
+            <motion.button
+              type="button"
+              aria-label="Fechar console do Jarvis"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConsoleOpen(false)}
+              className="fixed inset-0 z-30 cursor-default bg-abyss-950/75 backdrop-blur-sm"
+            />
+
+            <motion.div
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", stiffness: 240, damping: 28 }}
+              className="fixed inset-y-0 left-0 z-40 w-full max-w-[26rem] p-3"
+            >
+              <JarvisConsole
+                status={jarvis.status}
+                phase={jarvis.phase}
+                history={jarvis.history}
+                interim={jarvis.interim}
+                onAsk={jarvis.ask}
+                onReset={jarvis.reset}
+                onClose={() => setConsoleOpen(false)}
+                className="!bg-abyss-900/95"
+              />
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Abaixo de xl o rail vira uma gaveta sobreposta ao mapa. */}
       <AnimatePresence>

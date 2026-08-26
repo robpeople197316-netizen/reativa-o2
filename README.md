@@ -40,6 +40,11 @@ app/
 components/hud/
   JarvisDashboard.tsx     Casca: estado do núcleo, módulo ativo, voz, atalhos
   CampaignConsole.tsx     Console da Onda 2 dentro do painel de MARKETING
+  jarvis/
+    JarvisConsole.tsx     Painel de controle: abas, visão e entrada de texto
+    CapabilityLeds.tsx    Fita de status das quatro capacidades
+    Transcript.tsx        Conversa, com ferramentas usadas e fontes citadas
+    LembretesPanel.tsx    Lembretes do dia: criar, ver e concluir
   JarvisHeader.tsx        JARVIS CORE ONLINE, data/hora, clima, Obsidian Vault
   StatusPill.tsx          Bloco atômico do header
   OrbitalMap.tsx          Geometria das órbitas, linhas de conexão, fallback compacto
@@ -58,6 +63,8 @@ lib/
     onda2.server.ts       Parser que lê o ONDA2_app.html
     useOnda2.ts           Campanha completa (contatos, envio, progresso)
     useOnda2Progress.ts   Leitura barata do progresso, sem baixar a base
+  jarvis/hooks/
+    useLembretes.ts       Lista de lembretes para o painel
   useClock.ts             Relógio em tempo real (sem mismatch de SSR)
   useWeather.ts           Clima local (simulado — troque pelo seu provedor)
   useVaultSync.ts         Status do Obsidian Local Vault
@@ -230,6 +237,10 @@ pastas, upsert aditivo, recálculo dos totais, gatilho de lembrete disparando um
 única vez, os três cálculos financeiros, bloqueio de travessia de caminho e a
 degradação explícita de cada capacidade sem chave.
 
+No painel: as três larguras sem overflow, criação de lembrete chegando ao
+arquivo do cofre, e a captura de webcam anexando, enviando e aparecendo na
+transcrição (com câmera falsa do navegador).
+
 O **laço de ferramentas** foi verificado contra um servidor falso no lugar da
 API: confirmou que a requisição sai com `thinking: adaptive`, `effort` em
 `output_config`, as ferramentas com `strict` e os `tool_result` numa única
@@ -240,14 +251,68 @@ credenciais de Anthropic, OpenAI nem ElevenLabs**. As chamadas ao modelo, ao
 Whisper e à ElevenLabs seguem o contrato documentado de cada uma, mas nenhuma
 foi exercida de verdade.
 
+## O painel de controle
+
+O botão **CONSOLE** no cabeçalho (ou a tecla **J**) abre o painel do Jarvis. Ele
+reúne o que antes só existia na API.
+
+### Onde ele aparece
+
+| Largura | Comportamento |
+| --- | --- |
+| ≥ 1536px | terceira coluna fixa: console · mapa orbital · módulos |
+| < 1536px | gaveta pela esquerda, com scrim sobre o mapa |
+
+O corte é em 1536px, não em 1280: com três colunas num monitor menor o mapa
+orbital ficaria abaixo do limite de 720px e cairia na grade compacta — o HUD
+perderia justamente o que ele é.
+
+### O que tem dentro
+
+**Fita de capacidades** — quatro LEDs: cérebro, ouvido, voz e cofre. Verde não
+quer dizer "melhor": ouvido e voz funcionam desligados, só por outro caminho, e
+o rótulo diz qual (`usando a fala do navegador`, `usando a voz do sistema`). Só
+cérebro e cofre acendem vermelho, porque sem eles não há o que fazer. O caminho
+do cofre aparece embaixo.
+
+**Conversa** — a transcrição mostra cada turno e, sob as respostas, **as
+ferramentas que foram usadas** e **as fontes citadas** quando houve pesquisa
+web. Dá para auditar de onde veio cada afirmação sem abrir o log.
+
+**Visão** — os dois botões capturam webcam ou tela e **anexam o quadro à
+conversa**, em vez de abrir um diálogo paralelo: assim o Jarvis cruza o que vê
+com o histórico da cliente. O anexo fica fixado até você removê-lo, e a
+miniatura visível avisa que ele está indo junto — perguntas de acompanhamento
+sobre a mesma foto continuam funcionando.
+
+**Lembretes** — os do dia, com criação rápida (texto + hora) e conclusão. O
+disparo em voz alta continua sendo do `useJarvis`; esta aba é a lista visível.
+Os dois leem o mesmo arquivo do cofre.
+
+### Transcrição e contexto são coisas diferentes
+
+A transcrição guarda tudo, inclusive as falhas, marcadas em âmbar. O contexto
+mandado ao modelo guarda só os turnos que deram certo, e só texto. Sem essa
+separação, ou um erro de rede apagaria a pergunta da tela, ou `Erro: status 502`
+entraria no histórico como se fosse resposta do assistente.
+
+Imagem vai na rodada dela, nunca no histórico — por isso o anexo fica fixado.
+
+### Atalhos
+
+| Tecla | Ação |
+| --- | --- |
+| `J` | abre e fecha o console |
+| `Espaço` | alterna o microfone |
+| `Esc` | fecha o console; com ele fechado, fecha o módulo aberto |
+
 ## Interação
 
 | Ação | Resultado |
 | --- | --- |
 | Clique em um nó | Abre a telemetria do módulo no rail (gaveta abaixo de `xl`) |
 | Clique no núcleo | Alterna STANDBY ↔ LISTENING |
-| `Espaço` | Alterna o microfone |
-| `Esc` | Fecha o módulo aberto |
+| Botão CONSOLE / `J` | Abre o painel de controle do Jarvis |
 
 ## Áudio
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, CloudSun, Database, Droplets } from "lucide-react";
+import { Activity, CloudSun, Database, Droplets, PanelLeft } from "lucide-react";
 
 import { StatusPill } from "@/components/hud/StatusPill";
 import { useClock } from "@/lib/useClock";
@@ -13,7 +13,15 @@ const VAULT_META = {
   offline: { text: "OFFLINE", dot: "bg-rose", pulse: true },
 } as const;
 
-export function JarvisHeader() {
+interface JarvisHeaderProps {
+  consoleOpen?: boolean;
+  onToggleConsole?: () => void;
+}
+
+export function JarvisHeader({
+  consoleOpen = false,
+  onToggleConsole,
+}: JarvisHeaderProps) {
   const clock = useClock();
   const weather = useWeather();
   const vault = useVaultSync();
@@ -45,6 +53,24 @@ export function JarvisHeader() {
               ONLINE
             </p>
           </div>
+
+          {onToggleConsole && (
+            <button
+              type="button"
+              onClick={onToggleConsole}
+              aria-pressed={consoleOpen}
+              aria-label="Alternar console do JARVIS"
+              title="Console do JARVIS (tecla J)"
+              className={`ml-auto flex shrink-0 items-center gap-1.5 rounded border px-2.5 py-1.5 font-display text-[9px] tracking-[0.18em] transition-colors lg:ml-0 ${
+                consoleOpen
+                  ? "border-plasma/70 bg-plasma/15 text-hud-100"
+                  : "border-hud-400/25 text-hud-200/75 hover:border-hud-300/50 hover:text-hud-100"
+              }`}
+            >
+              <PanelLeft className="h-3.5 w-3.5" strokeWidth={1.6} />
+              CONSOLE
+            </button>
+          )}
         </div>
 
         <div className="hidden h-8 w-px bg-hud-400/20 lg:block" />

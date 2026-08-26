@@ -20,6 +20,30 @@ export interface JarvisStatus {
 export interface JarvisTurn {
   role: "user" | "assistant";
   content: string;
+  /** Miniatura da imagem enviada nesta fala, só para exibição. */
+  imagem?: string;
+  /** Ferramentas usadas para produzir esta resposta. */
+  ferramentas?: string[];
+  /** Fontes citadas quando houve pesquisa web. */
+  fontes?: { title: string; url: string }[];
+  /** Turno de falha — exibido, mas fora do contexto mandado ao modelo. */
+  erro?: boolean;
+}
+
+export interface JarvisAnexo {
+  /** Data URL completa: "data:image/jpeg;base64,...". */
+  dataUrl: string;
+  origem: "webcam" | "tela";
+}
+
+/** Separa a data URL no formato que a API espera. */
+function parseAnexo(anexo: JarvisAnexo) {
+  const match = anexo.dataUrl.match(
+    /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/s,
+  );
+
+  if (!match) return null;
+  return { mediaType: match[1], data: match[2], origem: anexo.origem };
 }
 
 export type JarvisPhase = "standby" | "listening" | "thinking" | "speaking";
@@ -90,9 +114,15 @@ export function useJarvis({
     [emit, voice],
   );
 
-  /** Manda uma frase ao cérebro e fala a resposta. */
+  /**
+   * Manda uma frase ao cérebro e fala a resposta.
+   *
+   * O anexo, quando existe, vai como imagem desta rodada — é assim que a
+   * webcam e a leitura de tela entram na MESMA conversa, em vez de virarem
+   * um diálogo paralelo.
+   */
   const ask = useCallback(
-    async (message: string) => {
+    async (message: string, anexo?: JarvisAnexo | null) => {
       const clean = message.trim();
       if (!clean) return;
 
@@ -100,13 +130,49 @@ export function useJarvis({
       setError(null);
       setPhase("thinking");
 
-      const next = [...historyRef.current, { role: "user" as const, content: clean }];
+      const imagem = anexo ? parseAnexo(anexo) : null;
+
+      // Anexo que não dá para ler não pode virar pergunta sem imagem: o
+      // operador acharia que o Jarvis viu a foto quando ele não viu.
+      if (anexo && !imagem) {
+        const detalhe = "Não consegui ler a imagem anexada (formato inesperado).";
+        setError(detalhe);
+        emit({ kind: "erro", text: detalhe });
+        setHistory((prev) => [
+          ...prev,
+          { role: "assistant", content: detalhe, erro: true },
+        ]);
+        setPhase("standby");
+        return;
+      }
+
+      // A transcrição mostra a pergunta na hora; a resposta chega depois.
+      setHistory((prev) => [
+        ...prev,
+        { role: "user", content: clean, imagem: anexo?.dataUrl },
+      ]);
 
       try {
         const res = await fetch("/api/jarvis/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: clean, history: historyRef.current }),
+          body: JSON.stringify({
+            message: clean,
+            // O histórico enviado é só texto: imagens ficam na rodada delas.
+            history: historyRef.current.map((t) => ({
+              role: t.role,
+              content: t.content,
+            })),
+            images: imagem
+              ? [
+                  {
+                    data: imagem.data,
+                    mediaType: imagem.mediaType,
+                    origem: imagem.origem,
+                  },
+                ]
+              : undefined,
+          }),
         });
 
         const json = (await res.json()) as {
@@ -120,6 +186,11 @@ export function useJarvis({
           const detail = json.error ?? `status ${res.status}`;
           setError(detail);
           emit({ kind: "erro", text: detail });
+          // Fica visível na transcrição, mas fora do contexto do modelo.
+          setHistory((prev) => [
+            ...prev,
+            { role: "assistant", content: detail, erro: true },
+          ]);
           setPhase("standby");
           return;
         }
@@ -131,15 +202,31 @@ export function useJarvis({
           });
         }
 
-        const updated = [...next, { role: "assistant" as const, content: json.reply }];
-        historyRef.current = updated;
-        setHistory(updated);
+        const resposta: JarvisTurn = {
+          role: "assistant",
+          content: json.reply,
+          ferramentas: (json.toolCalls ?? []).map((c) => c.name),
+          fontes: json.sources,
+        };
+
+        // Contexto do modelo: só os turnos que deram certo, só texto.
+        historyRef.current = [
+          ...historyRef.current,
+          { role: "user", content: clean },
+          { role: "assistant", content: json.reply },
+        ];
+
+        setHistory((prev) => [...prev, resposta]);
 
         await say(json.reply);
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         setError(detail);
         emit({ kind: "erro", text: detail });
+        setHistory((prev) => [
+          ...prev,
+          { role: "assistant", content: detail, erro: true },
+        ]);
         setPhase("standby");
       }
     },
