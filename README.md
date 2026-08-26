@@ -201,6 +201,26 @@ A visão manda o quadro para `/api/jarvis/vision/analyze`, que roda o mesmo
 cérebro com as ferramentas disponíveis — então o Jarvis cruza o que vê na
 cadeira com o histórico químico da cliente antes de opinar.
 
+### Conversa contínua
+
+Ligada no console, a escuta reabre sozinha por **8 segundos** depois de cada
+resposta — dá para emendar sem tocar em nada, que é o que importa com a mão na
+tinta. A preferência fica salva no navegador.
+
+Duas coisas sustentam isso:
+
+- **O microfone nunca fica aberto enquanto o Jarvis fala.** `say()` fecha a
+  escuta antes de sintetizar e a janela só reabre depois do fim da fala. Sem
+  isso ele se ouve e responde a si mesmo, em laço.
+- **A janela fecha sozinha.** Oito segundos, não "até você desligar". Num salão
+  há cliente na cadeira, e microfone aberto sem motivo é constrangimento, não
+  recurso. O rodapé mostra `AGUARDANDO` e o console pisca "ouvindo" enquanto
+  ela dura.
+
+No modo Whisper a janela é também a duração da gravação, então cada
+acompanhamento sem fala custa uma transcrição. Com a fala do navegador não há
+esse custo.
+
 ### A voz tem três caminhos
 
 `/api/jarvis/voice/speak` é uma rota só, com dois provedores atrás dela —

@@ -5,6 +5,7 @@ import {
   Camera,
   Loader2,
   Monitor,
+  Repeat,
   RotateCcw,
   SendHorizonal,
   X,
@@ -32,6 +33,11 @@ interface JarvisConsoleProps {
   onClose: () => void;
   /** Toca uma frase de teste pelo caminho de voz ativo. */
   onTestVoice?: () => void;
+  /** Conversa contínua ligada? */
+  continuo?: boolean;
+  onToggleContinuo?: () => void;
+  /** Verdadeiro enquanto a janela de acompanhamento está aberta. */
+  aguardando?: boolean;
   className?: string;
 }
 
@@ -59,6 +65,9 @@ export function JarvisConsole({
   onReset,
   onClose,
   onTestVoice,
+  continuo = false,
+  onToggleContinuo,
+  aguardando = false,
   className = "",
 }: JarvisConsoleProps) {
   const [aba, setAba] = useState<Aba>("conversa");
@@ -217,6 +226,44 @@ export function JarvisConsole({
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {/* Conversa contínua + aviso de escuta aberta */}
+            {onToggleContinuo && (
+              <div className="mb-1.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onToggleContinuo}
+                  aria-pressed={continuo}
+                  title={
+                    continuo
+                      ? "Depois de responder, ele continua ouvindo por alguns segundos"
+                      : "Ligar para emendar perguntas sem tocar no microfone"
+                  }
+                  className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.14em] transition-colors ${
+                    continuo
+                      ? "border-acid/60 bg-acid/10 text-acid"
+                      : "border-hud-400/25 text-hud-300/60 hover:border-hud-300/50 hover:text-hud-200"
+                  }`}
+                >
+                  <Repeat className="h-3 w-3" strokeWidth={2} />
+                  Conversa contínua
+                </button>
+
+                {aguardando && (
+                  <motion.span
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-acid"
+                  >
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-acid/70" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-acid" />
+                    </span>
+                    ouvindo
+                  </motion.span>
+                )}
+              </div>
+            )}
 
             <div className="flex gap-1.5">
               <button

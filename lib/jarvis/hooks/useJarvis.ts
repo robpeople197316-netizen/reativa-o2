@@ -59,6 +59,15 @@ export interface JarvisEvent {
 const REMINDER_POLL_MS = 60_000;
 
 /**
+ * Janela de acompanhamento: quanto tempo o microfone fica aberto depois que o
+ * Jarvis termina de falar. Curta de propósito — num salão há cliente na
+ * cadeira, e microfone aberto sem motivo é constrangimento, não recurso.
+ */
+const JANELA_MS = 8_000;
+
+const CHAVE_CONTINUO = "jarvis:conversa-continua";
+
+/**
  * O Jarvis inteiro, do ponto de vista da interface.
  *
  * Escolhe os melhores caminhos de voz a partir do que o servidor tem ligado,
@@ -76,6 +85,21 @@ export function useJarvis({
   const historyRef = useRef<JarvisTurn[]>([]);
   const onEventRef = useRef(onEvent);
 
+  // Conversa contínua: reabre o microfone sozinho após cada resposta.
+  const [continuo, setContinuo] = useState(false);
+  const [aguardando, setAguardando] = useState(false);
+  const continuoRef = useRef(false);
+  const janelaRef = useRef<number | null>(null);
+
+  /**
+   * Controles da escuta por referência.
+   *
+   * `ask` precisa reabrir o microfone, mas é declarado ANTES do hook de
+   * reconhecimento — que por sua vez precisa de `ask`. A referência quebra o
+   * ciclo sem inverter a ordem.
+   */
+  const escutaRef = useRef<{ start: () => void; stop: () => void } | null>(null);
+
   useEffect(() => {
     onEventRef.current = onEvent;
   }, [onEvent]);
@@ -83,6 +107,45 @@ export function useJarvis({
   const emit = useCallback((event: JarvisEvent) => {
     onEventRef.current?.(event);
   }, []);
+
+  // Preferência de conversa contínua sobrevive ao recarregar a página.
+  useEffect(() => {
+    try {
+      const salvo = window.localStorage.getItem(CHAVE_CONTINUO) === "1";
+      setContinuo(salvo);
+      continuoRef.current = salvo;
+    } catch {
+      /* storage bloqueado: segue desligado */
+    }
+  }, []);
+
+  const fecharJanela = useCallback(() => {
+    if (janelaRef.current !== null) {
+      window.clearTimeout(janelaRef.current);
+      janelaRef.current = null;
+    }
+    setAguardando(false);
+  }, []);
+
+  const alternarContinuo = useCallback(() => {
+    setContinuo((antes) => {
+      const agora = !antes;
+      continuoRef.current = agora;
+
+      try {
+        window.localStorage.setItem(CHAVE_CONTINUO, agora ? "1" : "0");
+      } catch {
+        /* sem persistência — a sessão atual ainda vale */
+      }
+
+      if (!agora) {
+        fecharJanela();
+        escutaRef.current?.stop();
+      }
+
+      return agora;
+    });
+  }, [fecharJanela]);
 
   // Descobre o que está disponível neste ambiente.
   useEffect(() => {
@@ -109,12 +172,37 @@ export function useJarvis({
   const say = useCallback(
     async (text: string) => {
       emit({ kind: "jarvis", text });
+
+      // Falar com o microfone aberto faz o Jarvis se ouvir e responder a si
+      // mesmo. Fecha antes, reabre depois — nunca os dois ao mesmo tempo.
+      escutaRef.current?.stop();
+      fecharJanela();
+
       setPhase("speaking");
       await voice.speak(text);
       setPhase("standby");
     },
-    [emit, voice],
+    [emit, fecharJanela, voice],
   );
+
+  /**
+   * Reabre a escuta por alguns segundos depois da resposta.
+   *
+   * Se nada vier, fecha sozinha — é o que separa "conversa contínua" de
+   * "microfone ligado o dia inteiro".
+   */
+  const abrirJanela = useCallback(() => {
+    if (!continuoRef.current) return;
+
+    setAguardando(true);
+    escutaRef.current?.start();
+
+    janelaRef.current = window.setTimeout(() => {
+      janelaRef.current = null;
+      setAguardando(false);
+      escutaRef.current?.stop();
+    }, JANELA_MS);
+  }, []);
 
   /**
    * Manda uma frase ao cérebro e fala a resposta.
@@ -221,6 +309,7 @@ export function useJarvis({
         setHistory((prev) => [...prev, resposta]);
 
         await say(json.reply);
+        abrirJanela();
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
         setError(detail);
@@ -232,15 +321,21 @@ export function useJarvis({
         setPhase("standby");
       }
     },
-    [emit, say],
+    [abrirJanela, emit, say],
   );
 
   const speech = useSpeechRecognition({
     mode: status?.capabilities.whisper ? "whisper" : "webspeech",
     onFinal: (text) => {
+      fecharJanela();
       void ask(text);
     },
   });
+
+  // Publica os controles para `ask` e `say` alcançarem sem ciclo de declaração.
+  useEffect(() => {
+    escutaRef.current = { start: speech.start, stop: speech.stop };
+  }, [speech.start, speech.stop]);
 
   // A fase segue a escuta, mas nunca atropela um "pensando" já em curso.
   useEffect(() => {
@@ -290,6 +385,9 @@ export function useJarvis({
     emit({ kind: "erro", text: problema });
   }, [emit, speech.error, voice.error]);
 
+  // Encerra tudo ao desmontar: janela pendente não pode reabrir microfone.
+  useEffect(() => () => fecharJanela(), [fecharJanela]);
+
   const reset = useCallback(() => {
     historyRef.current = [];
     setHistory([]);
@@ -304,8 +402,16 @@ export function useJarvis({
     listening: speech.listening,
     speaking: voice.speaking,
     /** Alterna o microfone — o ciclo completo dispara sozinho. */
-    toggleListening: speech.toggle,
+    toggleListening: () => {
+      fecharJanela();
+      speech.toggle();
+    },
     stopListening: speech.stop,
+    /** Conversa contínua: reabre o microfone após cada resposta. */
+    continuo,
+    alternarContinuo,
+    /** Verdadeiro durante a janela de acompanhamento. */
+    aguardando,
     ask,
     say,
     reset,

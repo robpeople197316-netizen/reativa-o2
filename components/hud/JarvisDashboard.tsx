@@ -218,6 +218,9 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
               onReset={jarvis.reset}
               onClose={() => setConsoleOpen(false)}
               onTestVoice={testarVoz}
+              continuo={jarvis.continuo}
+              onToggleContinuo={jarvis.alternarContinuo}
+              aguardando={jarvis.aguardando}
             />
           </div>
         )}
@@ -274,6 +277,9 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
                 onReset={jarvis.reset}
                 onClose={() => setConsoleOpen(false)}
                 onTestVoice={testarVoz}
+                continuo={jarvis.continuo}
+                onToggleContinuo={jarvis.alternarContinuo}
+                aguardando={jarvis.aguardando}
                 className="!bg-abyss-900/95"
               />
             </motion.div>
@@ -322,7 +328,9 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
         micStatus={micStatus}
         dataRef={dataRef}
         entries={entries}
-        phaseLabel={PHASE_LABEL[jarvis.phase]}
+        phaseLabel={
+          jarvis.aguardando ? "AGUARDANDO" : PHASE_LABEL[jarvis.phase]
+        }
         interim={jarvis.interim}
       />
     </div>
