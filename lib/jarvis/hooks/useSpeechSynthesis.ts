@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export type VoiceMode = "browser" | "elevenlabs";
+/** `server` = a rota /api/jarvis/voice/speak, seja qual for o provedor. */
+export type VoiceMode = "browser" | "server";
 
 /**
  * A lista de vozes do navegador chega DEPOIS do primeiro acesso: `getVoices()`
@@ -148,7 +149,7 @@ export function useSpeechSynthesis({
       setError(null);
       cancel();
 
-      if (mode !== "elevenlabs") {
+      if (mode !== "server") {
         await speakBrowser(clean);
         return;
       }
@@ -189,8 +190,8 @@ export function useSpeechSynthesis({
           });
         });
       } catch {
-        // Voz premium indisponível não pode calar o assistente.
-        setError("ElevenLabs indisponível — usando a voz do navegador.");
+        // Voz de servidor indisponível não pode calar o assistente.
+        setError("Voz do servidor indisponível — usando a voz do navegador.");
         await speakBrowser(clean);
       }
     },

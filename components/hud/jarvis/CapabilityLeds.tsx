@@ -5,7 +5,7 @@ import { Brain, Ear, FolderTree, Volume2, type LucideIcon } from "lucide-react";
 import type { JarvisStatus } from "@/lib/jarvis/hooks/useJarvis";
 
 interface Capability {
-  key: keyof JarvisStatus["capabilities"];
+  key: "brain" | "whisper" | "voiceServer" | "vault";
   label: string;
   icon: LucideIcon;
   /** O que acontece quando esta capacidade está desligada. */
@@ -26,7 +26,7 @@ const CAPABILITIES: Capability[] = [
     fallback: "usando a fala do navegador",
   },
   {
-    key: "elevenLabs",
+    key: "voiceServer",
     label: "Voz",
     icon: Volume2,
     fallback: "usando a voz do sistema",
@@ -64,8 +64,19 @@ export function CapabilityLeds({
 
           const Icon = cap.icon;
 
-          const testavel = cap.key === "elevenLabs" && Boolean(onTestVoice);
-          const base = ativo ? `${cap.label}: ativo` : `${cap.label}: ${cap.fallback}`;
+          const testavel = cap.key === "voiceServer" && Boolean(onTestVoice);
+          // Para a voz, "ativo" sozinho não diz nada: o operador precisa saber
+          // se está ouvindo a ElevenLabs, o Google ou a voz do Windows.
+          const detalhe =
+            cap.key === "voiceServer" && ativo
+              ? status?.capabilities.voiceProvider === "google"
+                ? "Google"
+                : "ElevenLabs"
+              : null;
+
+          const base = ativo
+            ? `${cap.label}: ${detalhe ?? "ativo"}`
+            : `${cap.label}: ${cap.fallback}`;
 
           const conteudo = (
             <>

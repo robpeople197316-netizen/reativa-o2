@@ -144,7 +144,7 @@ liga sozinha quando a chave existe, e o que falta degrada de forma explícita:
 | `OBSIDIAN_VAULT_PATH` | usa `./jarvis-vault` no projeto (teste, não produção) |
 | `ANTHROPIC_API_KEY` | conversa, visão e pesquisa web ficam offline; o HUD avisa no log |
 | `OPENAI_API_KEY` | transcrição cai para a Web Speech API do navegador |
-| `ELEVENLABS_API_KEY` | fala cai para o `speechSynthesis` do sistema |
+| `ELEVENLABS_API_KEY` ou `GOOGLE_TTS_API_KEY` | fala cai para o `speechSynthesis` do sistema |
 
 `GET /api/jarvis/status` responde o que está ligado — só booleanos, nenhuma
 chave sai do servidor. É por ele que os hooks escolhem Whisper ou Web Speech,
@@ -192,7 +192,7 @@ fonte e **proíbe estimar preço de fornecedor como se fosse pesquisado**.
 | Hook | O que faz |
 | --- | --- |
 | `useSpeechRecognition` | Web Speech API ou gravação + Whisper, escolhido pelo status |
-| `useSpeechSynthesis` | ElevenLabs com queda automática para a voz do sistema |
+| `useSpeechSynthesis` | voz do servidor com queda automática para a do sistema |
 | `useWebcam` | abre a câmera **só no instante da captura**, tira um quadro e fecha |
 | `useScreenCapture` | Screen Capture API para o Jarvis ler a tela atual |
 | `useJarvis` | orquestra tudo: status, ciclo de voz, histórico e lembretes |
@@ -200,6 +200,26 @@ fonte e **proíbe estimar preço de fornecedor como se fosse pesquisado**.
 A visão manda o quadro para `/api/jarvis/vision/analyze`, que roda o mesmo
 cérebro com as ferramentas disponíveis — então o Jarvis cruza o que vê na
 cadeira com o histórico químico da cliente antes de opinar.
+
+### A voz tem três caminhos
+
+`/api/jarvis/voice/speak` é uma rota só, com dois provedores atrás dela —
+**ElevenLabs** e **Google Cloud Text-to-Speech**. Quem chama recebe `audio/mpeg`
+e não sabe qual respondeu; `resolveTtsProvider()` decide no servidor. Sem chave
+nenhuma a rota devolve 503 e o navegador assume com a voz do sistema.
+
+Essa terceira via é a mais frágil das três, e por um motivo que só aparece na
+máquina do salão: ela depende de haver uma voz em português **instalada no
+Windows**, o que nem sempre é o caso. Quando não há, o HUD diz onde instalar em
+vez de ficar mudo. É esse buraco que a voz de servidor fecha.
+
+Duas decisões do lado do Google:
+
+- **Nome de voz errado não emudece.** Catálogos mudam. Se o Google recusar o
+  nome com 400, o Jarvis repete o pedido só com `languageCode: pt-BR` e deixa
+  ele escolher.
+- **Preferência só vale com a chave.** Pedir `JARVIS_TTS_PROVIDER=elevenlabs`
+  sem a chave dela cai no Google — o HUD nunca anuncia uma voz que não entrega.
 
 ### Lembretes com gatilho
 

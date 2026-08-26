@@ -9,7 +9,9 @@ export interface JarvisStatus {
   capabilities: {
     brain: boolean;
     whisper: boolean;
-    elevenLabs: boolean;
+    /** Há síntese de voz no servidor? */
+    voiceServer: boolean;
+    voiceProvider: "elevenlabs" | "google" | null;
     vault: boolean;
   };
   vault: { path: string | null; error: string | null };
@@ -101,7 +103,7 @@ export function useJarvis({
   }, []);
 
   const voice = useSpeechSynthesis({
-    mode: status?.capabilities.elevenLabs ? "elevenlabs" : "browser",
+    mode: status?.capabilities.voiceServer ? "server" : "browser",
   });
 
   const say = useCallback(

@@ -128,12 +128,16 @@ export function JarvisDashboard({ onda2 }: { onda2: Onda2Summary }) {
    * sistema antes de configurar qualquer chave de API.
    */
   const testarVoz = useCallback(() => {
-    const elevenlabs = jarvis.status?.capabilities.elevenLabs;
-    void jarvis.say(
-      elevenlabs
-        ? "Voz da ElevenLabs ativa. Estou pronto para começar o dia."
-        : "Voz do sistema ativa. Estou pronto para começar o dia.",
-    );
+    const provedor = jarvis.status?.capabilities.voiceProvider;
+
+    const origem =
+      provedor === "google"
+        ? "Voz do Google"
+        : provedor === "elevenlabs"
+          ? "Voz da ElevenLabs"
+          : "Voz do sistema";
+
+    void jarvis.say(`${origem} ativa. Estou pronto para começar o dia.`);
   }, [jarvis]);
 
   const toggleListening = useCallback(() => {
