@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <radialGradient id="core" cx="50%" cy="42%" r="55%">
+      <stop offset="0%" stop-color="#c5f8ff"/>
+      <stop offset="45%" stop-color="#1fd0f5"/>
+      <stop offset="100%" stop-color="#03101c"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="32" height="32" rx="7" fill="#01060d"/>
+
+  <!-- anel técnico externo, como o do núcleo no HUD -->
+  <circle cx="16" cy="16" r="12" fill="none" stroke="#4fe3ff" stroke-opacity="0.5"
+          stroke-width="1.2" stroke-dasharray="3 2.5"/>
+  <circle cx="16" cy="16" r="9" fill="none" stroke="#4fe3ff" stroke-opacity="0.3"
+          stroke-width="0.8"/>
+
+  <!-- núcleo -->
+  <circle cx="16" cy="16" r="6" fill="url(#core)"/>
+</svg>
